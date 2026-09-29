@@ -1,0 +1,1055 @@
+```html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ruangan Misteri - Pixel Arcade Edition</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Retro Pixel Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Fredoka:wght@600;700&family=Plus+Jakarta+Sans:wght@600;800" rel="stylesheet">
+    <!-- MQTT WebSocket Real-Time Sync Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            background-color: #0d0817;
+        }
+        .font-pixel {
+            font-family: 'Press Start 2P', cursive;
+        }
+        .font-game {
+            font-family: 'Fredoka', cursive;
+        }
+        /* Retro Pixel Button & Panel Styles */
+        .pixel-box {
+            border: 4px solid #1e1b4b;
+            box-shadow: 4px 4px 0px #000000, inset -3px -3px 0px rgba(0,0,0,0.3);
+        }
+        .pixel-btn {
+            box-shadow: 0px 5px 0px #92400e, 0px 8px 12px rgba(0,0,0,0.5);
+            transition: all 0.08s ease;
+        }
+        .pixel-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0px 1px 0px #92400e;
+        }
+        .dpad-btn {
+            background: rgba(30, 27, 75, 0.85);
+            border: 3px solid #f59e0b;
+            box-shadow: 3px 3px 0px #000000;
+        }
+        .dpad-btn:active {
+            transform: scale(0.90);
+            background: #f59e0b;
+            color: #000;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Crisp Pixel Canvas Engine */
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen relative overflow-hidden bg-slate-950 text-slate-100 select-none">
+
+    <!-- Full-Bleed Edge-to-Edge Canvas -->
+    <canvas id="gameCanvas" class="w-full h-full block absolute inset-0 z-0 bg-[#0d0817]"></canvas>
+
+    <!-- Top HUD Header -->
+    <header class="fixed top-2 left-2 right-2 md:top-3 md:left-4 md:right-4 z-20 pointer-events-none flex items-center justify-between gap-2">
+        <!-- Left: Game Brand & Online Player Counter -->
+        <div class="pointer-events-auto flex items-center gap-2 bg-indigo-950/90 border-2 border-amber-400 p-2 md:px-3.5 md:py-2 rounded-2xl shadow-[4px_4px_0px_#000] backdrop-blur-md">
+            <div class="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-amber-400 text-indigo-950 flex items-center justify-center text-base md:text-lg font-bold shadow-inner">
+                <i class="fa-solid fa-gamepad"></i>
+            </div>
+            <div>
+                <h1 class="font-pixel text-[9px] md:text-xs text-amber-300 leading-tight tracking-wider">RUANG MISTERI</h1>
+                <button id="toggle-online-list-btn" class="flex items-center gap-1.5 hover:opacity-80 transition cursor-pointer text-left">
+                    <span class="flex h-2 w-2 relative">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span class="text-[10px] md:text-xs text-slate-200 font-semibold"><span id="player-count-hud" class="text-amber-400 font-bold">1</span> Live <i class="fa-solid fa-users text-[10px] text-amber-400 ml-0.5"></i></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Right: Actions & Fullscreen Control -->
+        <div class="pointer-events-auto flex items-center gap-2">
+            <button id="fullscreen-btn" title="Layar Penuh" class="bg-indigo-950/90 hover:bg-indigo-900 text-amber-400 border-2 border-amber-400 p-2.5 rounded-2xl shadow-[3px_3px_0px_#000] transition active:scale-95">
+                <i class="fa-solid fa-expand text-sm md:text-base"></i>
+            </button>
+            <button id="reset-session-btn" title="Reset Sesi Kelompok" class="bg-rose-950/90 hover:bg-rose-900 text-rose-300 border-2 border-rose-500 p-2.5 md:px-3.5 md:py-2 rounded-2xl text-xs font-bold shadow-[3px_3px_0px_#000] transition active:scale-95 flex items-center gap-1.5">
+                <i class="fa-solid fa-rotate-right text-xs"></i>
+                <span class="hidden md:inline font-pixel text-[9px]">RESET</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Room Lock Status Indicator -->
+    <div id="player-room-status" class="hidden fixed top-16 md:top-20 left-1/2 -translate-x-1/2 bg-indigo-950/95 border-2 border-amber-400 text-amber-300 px-4 py-2 rounded-2xl shadow-[4px_4px_0px_#000] backdrop-blur flex items-center gap-2 text-xs md:text-sm animate-bounce z-20 font-game">
+        <i class="fa-solid fa-lock text-amber-400 text-base"></i>
+        <span>Kamu terkunci di <strong id="locked-room-name" class="text-white underline">Kamar ?</strong> <span id="locked-room-count" class="text-amber-400 font-bold">(1/5)</span>. Menunggu yang lain...</span>
+    </div>
+
+    <!-- Notification Toast Message -->
+    <div id="toast-message" class="hidden fixed bottom-20 md:bottom-24 left-1/2 -translate-x-1/2 bg-slate-900 border-2 border-amber-400 text-amber-200 px-4 py-2.5 rounded-xl shadow-[4px_4px_0px_#000] text-xs md:text-sm z-30 flex items-center gap-2 transition-all font-game">
+        <i class="fa-solid fa-circle-info text-amber-400 text-base"></i>
+        <span id="toast-text">Pesan pemberitahuan</span>
+    </div>
+
+    <!-- Active Players List Modal -->
+    <div id="online-players-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="max-w-md w-full bg-indigo-950 border-4 border-amber-400 rounded-3xl p-5 shadow-[8px_8px_0px_#000]">
+            <div class="flex items-center justify-between mb-3 pb-2 border-b-2 border-indigo-800">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-users text-amber-400 text-lg"></i>
+                    <h3 class="font-pixel text-xs md:text-sm text-amber-300">PEMAIN AKTIF</h3>
+                </div>
+                <button id="close-online-modal-btn" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div id="online-players-list" class="max-h-60 overflow-y-auto space-y-2 pr-1 font-game">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Game / Character Creator Modal -->
+    <div id="start-modal" class="fixed inset-0 bg-[#0d0817]/95 backdrop-blur-md flex flex-col items-center justify-center p-4 z-40 text-center overflow-y-auto">
+        <div class="max-w-md w-full bg-indigo-950 border-4 border-amber-400 p-6 md:p-8 rounded-3xl shadow-[10px_10px_0px_#000] flex flex-col items-center">
+            
+            <div class="w-16 h-16 bg-amber-400 text-indigo-950 rounded-2xl flex items-center justify-center text-3xl mb-3 border-2 border-white shadow-md">
+                <i class="fa-solid fa-ghost"></i>
+            </div>
+
+            <h2 class="text-lg md:text-xl font-pixel text-amber-300 mb-2 leading-relaxed">RUANGAN MISTERI</h2>
+            <p class="text-slate-300 text-xs md:text-sm mb-5 font-game leading-relaxed">
+                Pilih kamar secara acak bersama teman-temanmu! Isi kamar akan terbuka jika kuota penuh.
+            </p>
+
+            <div class="w-full space-y-3 mb-6 text-left">
+                <div>
+                    <label class="block text-xs font-pixel text-amber-400 mb-2"><i class="fa-solid fa-user mr-1"></i> NAMA KAMU:</label>
+                    <input type="text" id="player-name-input" value="" class="w-full bg-slate-950 border-2 border-indigo-700 focus:border-amber-400 rounded-xl px-4 py-3 text-white text-sm focus:outline-none font-bold" placeholder="Contoh: Mario / Budi">
+                </div>
+            </div>
+
+            <button id="start-btn" class="w-full bg-amber-400 hover:bg-amber-300 text-indigo-950 border-2 border-white font-pixel py-3.5 rounded-2xl text-xs md:text-sm transition pixel-btn flex items-center justify-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-play"></i> MASUK ARENA
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Completed Result Modal -->
+    <div id="result-modal" class="hidden fixed inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-4 md:p-6 z-50 overflow-y-auto">
+        <div class="max-w-4xl w-full bg-indigo-950 border-4 border-amber-400 rounded-3xl p-6 md:p-8 shadow-[10px_10px_0px_#000] text-center">
+            <div class="w-14 h-14 bg-emerald-500 text-slate-950 rounded-2xl border-2 border-white flex items-center justify-center text-2xl mx-auto mb-3 shadow-lg">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h2 class="text-lg md:text-2xl font-pixel text-amber-300 mb-2">SEMUA KAMAR TERBUKA!</h2>
+            <p class="text-slate-300 text-xs md:text-sm mb-6 font-game">Berikut adalah daftar pembentukan kelompok dari seluruh pemain:</p>
+
+            <!-- Grid of 6 Rooms Results -->
+            <div id="results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-left max-h-[55vh] overflow-y-auto p-1 mb-6 font-game">
+                <!-- Populated dynamically -->
+            </div>
+
+            <button id="restart-btn" class="bg-amber-400 hover:bg-amber-300 text-indigo-950 font-pixel px-6 py-3 rounded-2xl text-xs transition pixel-btn flex items-center gap-2 mx-auto cursor-pointer">
+                <i class="fa-solid fa-rotate-right"></i> MAIN LAGI
+            </button>
+        </div>
+    </div>
+
+    <!-- Floating Draggable Touch D-Pad for Mobile Devices -->
+    <div id="dpad-container" class="fixed bottom-5 left-5 z-30 md:hidden touch-none select-none">
+        <div class="bg-indigo-950/90 border-2 border-amber-400 rounded-xl p-1.5 shadow-[3px_3px_0px_#000] backdrop-blur-md">
+            <!-- Drag Handle Bar -->
+            <div id="dpad-handle" class="w-full h-5 flex items-center justify-center cursor-move text-amber-300 text-[8px] font-pixel active:text-amber-400 select-none border-b border-indigo-800/80 mb-1">
+                <i class="fa-solid fa-grip-lines mr-1 text-[10px] text-amber-400"></i> GESER
+            </div>
+            <div class="grid grid-cols-3 gap-1 w-24 h-24">
+                <div></div>
+                <button id="btn-up" class="dpad-btn rounded-lg text-amber-300 flex items-center justify-center text-sm font-bold"><i class="fa-solid fa-caret-up"></i></button>
+                <div></div>
+                <button id="btn-left" class="dpad-btn rounded-lg text-amber-300 flex items-center justify-center text-sm font-bold"><i class="fa-solid fa-caret-left"></i></button>
+                <div class="bg-indigo-950 border border-indigo-700 rounded-lg flex items-center justify-center text-amber-400 text-[10px]"><i class="fa-solid fa-gamepad"></i></div>
+                <button id="btn-right" class="dpad-btn rounded-lg text-amber-300 flex items-center justify-center text-sm font-bold"><i class="fa-solid fa-caret-right"></i></button>
+                <div></div>
+                <button id="btn-down" class="dpad-btn rounded-lg text-amber-300 flex items-center justify-center text-sm font-bold"><i class="fa-solid fa-caret-down"></i></button>
+                <div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let localPlayerState = null;
+        let remotePlayersMap = new Map();
+        let isGameJoined = false;
+
+        const tabUniqueId = Math.random().toString(36).substring(2, 9);
+        const instancePlayerId = "player_" + tabUniqueId;
+        
+        // MQTT WebSocket Global Real-Time Client Setup
+        let mqttClient = null;
+        const MQTT_TOPIC = "ruangan_misteri_arcade/global_session_v1";
+
+        class RetroSoundEffects {
+            constructor() { this.ctx = null; }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            playEnter() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.12);
+            }
+            playUnlock() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                [330, 440, 554, 659, 880].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.06);
+                    gain.gain.setValueAtTime(0.2, now + i * 0.06);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.06 + 0.2);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.06); osc.stop(now + i * 0.06 + 0.2);
+                });
+            }
+        }
+        const sfx = new RetroSoundEffects();
+
+        // Pixel Character Bright Retro Color Palettes
+        const PIXEL_PALETTES = [
+            { shirt: "#ef4444", pants: "#1e3a8a", hat: "#dc2626" },
+            { shirt: "#22c55e", pants: "#1e3a8a", hat: "#16a34a" },
+            { shirt: "#f59e0b", pants: "#431407", hat: "#d97706" },
+            { shirt: "#ec4899", pants: "#831843", hat: "#db2777" },
+            { shirt: "#06b6d4", pants: "#164e63", hat: "#0891b2" },
+            { shirt: "#8b5cf6", pants: "#3b0764", hat: "#7c3aed" },
+            { shirt: "#f97316", pants: "#7c2d12", hat: "#ea580c" },
+        ];
+
+        // Canvas Setup & Crisp Pixel Resolution Settings
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const WORLD_WIDTH = 1600;
+        const WORLD_HEIGHT = 1050;
+
+        let camera = {
+            x: WORLD_WIDTH / 2,
+            y: WORLD_HEIGHT / 2
+        };
+
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.floor(window.innerWidth * dpr);
+            canvas.height = Math.floor(window.innerHeight * dpr);
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const rooms = [
+            { id: 0, name: "Kamar 1", x: 80, y: 60, w: 420, h: 320, max: 5, occupants: [], isFull: false, doorX: 290, doorY: 380, theme: "cyan_gaming", color: "#38bdf8", bgWall: "#0f172a", bgFloor: "#1e293b", bedColor: "#ef4444", rugColor: "#0284c7" },
+            { id: 1, name: "Kamar 2", x: 590, y: 60, w: 420, h: 320, max: 5, occupants: [], isFull: false, doorX: 800, doorY: 380, theme: "green_garden", color: "#34d399", bgWall: "#064e3b", bgFloor: "#b45309", bedColor: "#10b981", rugColor: "#059669" },
+            { id: 2, name: "Kamar 3", x: 1100, y: 60, w: 420, h: 320, max: 5, occupants: [], isFull: false, doorX: 1310, doorY: 380, theme: "purple_pastel", color: "#c084fc", bgWall: "#3b0764", bgFloor: "#581c87", bedColor: "#ec4899", rugColor: "#a855f7" },
+            { id: 3, name: "Kamar 4", x: 80, y: 670, w: 420, h: 320, max: 5, occupants: [], isFull: false, doorX: 290, doorY: 670, theme: "amber_cozy", color: "#fbbf24", bgWall: "#78350f", bgFloor: "#451a03", bedColor: "#f97316", rugColor: "#d97706" },
+            { id: 4, name: "Kamar 5", x: 590, y: 670, w: 420, h: 320, max: 5, occupants: [], isFull: false, doorX: 800, doorY: 670, theme: "magenta_cyber", color: "#f472b6", bgWall: "#831843", bgFloor: "#0f766e", bedColor: "#06b6d4", rugColor: "#db2777" },
+            { id: 5, name: "Kamar 6", x: 1100, y: 670, w: 420, h: 320, max: 6, occupants: [], isFull: false, doorX: 1310, doorY: 670, theme: "royal_red", color: "#f87171", bgWall: "#7f1d1d", bgFloor: "#991b1b", bedColor: "#eab308", rugColor: "#dc2626" }
+        ];
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast-message');
+            document.getElementById('toast-text').textContent = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3500);
+        }
+
+        function initMQTTNetwork() {
+            try {
+                mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+                    clientId: instancePlayerId,
+                    keepalive: 15,
+                    reconnectPeriod: 2000
+                });
+
+                mqttClient.on('connect', () => {
+                    mqttClient.subscribe(MQTT_TOPIC);
+                    if (localPlayerState) publishMyState();
+                });
+
+                mqttClient.on('message', (topic, payload) => {
+                    try {
+                        const message = JSON.parse(payload.toString());
+                        if (message.senderId === instancePlayerId) return;
+
+                        if (message.type === 'PLAYER_UPDATE') {
+                            remotePlayersMap.set(message.player.id, message.player);
+                            updateRoomOccupanciesAndHUD();
+                            updateOnlineModalList();
+                        } else if (message.type === 'PLAYER_LEAVE') {
+                            remotePlayersMap.delete(message.playerId);
+                            updateRoomOccupanciesAndHUD();
+                            updateOnlineModalList();
+                        } else if (message.type === 'RESET_ALL') {
+                            remotePlayersMap.clear();
+                            if (localPlayerState) {
+                                localPlayerState.isLockedIn = false;
+                                localPlayerState.currentRoom = null;
+                            }
+                            document.getElementById('player-room-status')?.classList.add('hidden');
+                            updateRoomOccupanciesAndHUD();
+                            showToast("Arena telah direset oleh Host!");
+                        }
+                    } catch (e) {}
+                });
+            } catch (err) {
+                console.warn("MQTT setup fallback:", err);
+            }
+        }
+        initMQTTNetwork();
+
+        function publishMyState() {
+            if (!mqttClient || !mqttClient.connected || !localPlayerState) return;
+            localPlayerState.lastUpdated = Date.now();
+            mqttClient.publish(MQTT_TOPIC, JSON.stringify({
+                type: 'PLAYER_UPDATE',
+                senderId: instancePlayerId,
+                player: localPlayerState
+            }));
+        }
+
+        setInterval(() => {
+            const now = Date.now();
+            let changed = false;
+            remotePlayersMap.forEach((p, id) => {
+                if (now - (p.lastUpdated || 0) > 8000) {
+                    remotePlayersMap.delete(id);
+                    changed = true;
+                }
+            });
+            if (changed) {
+                updateRoomOccupanciesAndHUD();
+                updateOnlineModalList();
+            }
+            if (isGameJoined && localPlayerState) {
+                publishMyState();
+            }
+        }, 2000);
+
+        const keys = {};
+        window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+        const setupTouchBtn = (id, keyName) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyName] = false; });
+            btn.addEventListener('mousedown', () => { keys[keyName] = true; });
+            btn.addEventListener('mouseup', () => { keys[keyName] = false; });
+        };
+        setupTouchBtn('btn-up', 'ArrowUp');
+        setupTouchBtn('btn-down', 'ArrowDown');
+        setupTouchBtn('btn-left', 'ArrowLeft');
+        setupTouchBtn('btn-right', 'ArrowRight');
+
+        const dpadContainer = document.getElementById('dpad-container');
+        const dpadHandle = document.getElementById('dpad-handle');
+        let isDraggingDpad = false;
+        let dragStartX = 0, dragStartY = 0;
+        let initialElemX = 0, initialElemY = 0;
+
+        if (dpadContainer && dpadHandle) {
+            const onDragStart = (e) => {
+                isDraggingDpad = true;
+                const point = e.touches ? e.touches[0] : e;
+                dragStartX = point.clientX;
+                dragStartY = point.clientY;
+                const rect = dpadContainer.getBoundingClientRect();
+                initialElemX = rect.left;
+                initialElemY = rect.top;
+
+                dpadContainer.style.bottom = 'auto';
+                dpadContainer.style.right = 'auto';
+                dpadContainer.style.left = `${initialElemX}px`;
+                dpadContainer.style.top = `${initialElemY}px`;
+            };
+
+            const onDragMove = (e) => {
+                if (!isDraggingDpad) return;
+                if (e.cancelable) e.preventDefault();
+                const point = e.touches ? e.touches[0] : e;
+                const deltaX = point.clientX - dragStartX;
+                const deltaY = point.clientY - dragStartY;
+
+                let newX = initialElemX + deltaX;
+                let newY = initialElemY + deltaY;
+
+                const maxX = window.innerWidth - dpadContainer.offsetWidth - 10;
+                const maxY = window.innerHeight - dpadContainer.offsetHeight - 10;
+                newX = Math.max(10, Math.min(maxX, newX));
+                newY = Math.max(10, Math.min(maxY, newY));
+
+                dpadContainer.style.left = `${newX}px`;
+                dpadContainer.style.top = `${newY}px`;
+            };
+
+            const onDragEnd = () => { isDraggingDpad = false; };
+
+            dpadHandle.addEventListener('touchstart', onDragStart, { passive: false });
+            dpadHandle.addEventListener('mousedown', onDragStart);
+            window.addEventListener('touchmove', onDragMove, { passive: false });
+            window.addEventListener('mousemove', onDragMove);
+            window.addEventListener('touchend', onDragEnd);
+            window.addEventListener('mouseup', onDragEnd);
+        }
+
+        function startMultiplayerSession(playerName) {
+            sfx.init();
+
+            const chosenPalette = PIXEL_PALETTES[Math.floor(Math.random() * PIXEL_PALETTES.length)];
+
+            localPlayerState = {
+                id: instancePlayerId,
+                name: playerName,
+                palette: chosenPalette,
+                x: WORLD_WIDTH / 2 + (Math.random() * 160 - 80),
+                y: WORLD_HEIGHT / 2 + (Math.random() * 60 - 30),
+                dir: 'down',
+                animFrame: 0,
+                isMoving: false,
+                currentRoom: null,
+                isLockedIn: false,
+                lastUpdated: Date.now()
+            };
+
+            publishMyState();
+
+            document.getElementById('start-modal').classList.add('hidden');
+            document.getElementById('result-modal').classList.add('hidden');
+            document.getElementById('player-room-status').classList.add('hidden');
+            isGameJoined = true;
+
+            showToast(`Selamat datang, ${playerName}! Silakan pilih kamar.`);
+        }
+
+        function updateRoomOccupanciesAndHUD() {
+            rooms.forEach(r => { r.occupants = []; });
+
+            // Include local player instantly
+            if (localPlayerState && localPlayerState.isLockedIn && localPlayerState.currentRoom !== null && localPlayerState.currentRoom !== undefined) {
+                const r = rooms[localPlayerState.currentRoom];
+                if (r) r.occupants.push(localPlayerState);
+            }
+
+            // Include remote players
+            remotePlayersMap.forEach((player) => {
+                if (player.isLockedIn && player.currentRoom !== null && player.currentRoom !== undefined) {
+                    const roomObj = rooms[player.currentRoom];
+                    if (roomObj) roomObj.occupants.push(player);
+                }
+            });
+
+            let totalLockedIn = 0;
+
+            rooms.forEach((r) => {
+                totalLockedIn += r.occupants.length;
+                const wasFull = r.isFull;
+                r.isFull = (r.occupants.length >= r.max);
+
+                if (r.isFull && !wasFull) {
+                    sfx.playUnlock();
+                    createPixelConfetti(r.x + r.w / 2, r.y + r.h / 2);
+                }
+            });
+
+            const totalOnlineCount = remotePlayersMap.size + (isGameJoined ? 1 : 0);
+            const hudCountElem = document.getElementById('player-count-hud');
+            if (hudCountElem) hudCountElem.textContent = totalOnlineCount;
+
+            // Update top locked room status text
+            if (localPlayerState && localPlayerState.isLockedIn && localPlayerState.currentRoom !== null) {
+                const myRoom = rooms[localPlayerState.currentRoom];
+                if (myRoom) {
+                    const roomCountSpan = document.getElementById('locked-room-count');
+                    if (roomCountSpan) roomCountSpan.textContent = `(${myRoom.occupants.length}/${myRoom.max})`;
+                }
+            }
+
+            if (totalLockedIn === 31 && isGameJoined) {
+                setTimeout(showFinalResults, 1000);
+            }
+        }
+
+        let stepCycle = 0;
+        let lastMoveTime = 0;
+        function updateLocalPlayer() {
+            if (!localPlayerState || localPlayerState.isLockedIn) return;
+
+            let dx = 0; let dy = 0;
+
+            if (keys['ArrowUp'] || keys['KeyW']) { dy -= 1; localPlayerState.dir = 'up'; }
+            if (keys['ArrowDown'] || keys['KeyS']) { dy += 1; localPlayerState.dir = 'down'; }
+            if (keys['ArrowLeft'] || keys['KeyA']) { dx -= 1; localPlayerState.dir = 'left'; }
+            if (keys['ArrowRight'] || keys['KeyD']) { dx += 1; localPlayerState.dir = 'right'; }
+
+            if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
+
+            if (dx !== 0 || dy !== 0) {
+                localPlayerState.isMoving = true;
+                stepCycle += 0.2;
+                localPlayerState.animFrame = Math.floor(stepCycle) % 2;
+
+                localPlayerState.x += dx * 4.2;
+                localPlayerState.y += dy * 4.2;
+
+                localPlayerState.x = Math.max(30, Math.min(WORLD_WIDTH - 30, localPlayerState.x));
+                localPlayerState.y = Math.max(30, Math.min(WORLD_HEIGHT - 30, localPlayerState.y));
+
+                const now = Date.now();
+                if (now - lastMoveTime > 100) {
+                    lastMoveTime = now;
+                    publishMyState();
+                }
+            } else {
+                localPlayerState.isMoving = false;
+                localPlayerState.animFrame = 0;
+            }
+
+            for (let r of rooms) {
+                if (r.occupants.length < r.max) {
+                    const distToDoor = Math.hypot(localPlayerState.x - r.doorX, localPlayerState.y - r.doorY);
+                    if (distToDoor < 30) {
+                        enterRoom(r);
+                        break;
+                    }
+                }
+            }
+        }
+
+        function enterRoom(roomObj) {
+            if (roomObj.occupants.length >= roomObj.max) {
+                showToast("Kamar ini sudah penuh!");
+                return;
+            }
+
+            localPlayerState.currentRoom = roomObj.id;
+            localPlayerState.isLockedIn = true;
+
+            // Recalculate room occupancy immediately
+            updateRoomOccupanciesAndHUD();
+
+            const slotIndex = roomObj.occupants.length - 1;
+            const row = Math.floor(Math.max(0, slotIndex) / 3);
+            const col = Math.max(0, slotIndex) % 3;
+            
+            localPlayerState.x = roomObj.x + 110 + col * 100;
+            localPlayerState.y = roomObj.y + 140 + row * 85;
+
+            sfx.playEnter();
+            publishMyState();
+
+            document.getElementById('player-room-status').classList.remove('hidden');
+            document.getElementById('locked-room-name').textContent = roomObj.name;
+            document.getElementById('locked-room-count').textContent = `(${roomObj.occupants.length}/${roomObj.max})`;
+        }
+
+        let particles = [];
+        function createPixelConfetti(cx, cy) {
+            const colors = ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#8b5cf6', '#ef4444'];
+            for (let i = 0; i < 45; i++) {
+                particles.push({
+                    x: cx, y: cy,
+                    vx: (Math.random() - 0.5) * 14,
+                    vy: (Math.random() - 0.5) * 14 - 4,
+                    size: Math.random() * 6 + 4,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    life: 70
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life--;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(Math.floor(p.x), Math.floor(p.y), p.size, p.size);
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function drawPixelCharacter(pX, pY, palette, dir, animFrame, isMe, name) {
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+
+            const x = Math.floor(pX);
+            const y = Math.floor(pY);
+            const p = palette || PIXEL_PALETTES[0];
+
+            if (isMe) {
+                ctx.fillStyle = 'rgba(245, 158, 11, 0.5)';
+                ctx.beginPath();
+                ctx.ellipse(x, y + 14, 18, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(x, y + 15, 12, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            const legOffset = (animFrame === 1) ? 2 : 0;
+
+            ctx.fillStyle = '#111827';
+            ctx.fillRect(x - 8, y + 8 + legOffset, 6, 6);
+            ctx.fillRect(x + 2, y + 8 - legOffset, 6, 6);
+
+            ctx.fillStyle = p.pants;
+            ctx.fillRect(x - 7, y + 2, 14, 8);
+
+            ctx.fillStyle = p.shirt;
+            ctx.fillRect(x - 8, y - 6, 16, 9);
+            ctx.fillStyle = p.pants;
+            ctx.fillRect(x - 5, y - 6, 3, 9);
+            ctx.fillRect(x + 2, y - 6, 3, 9);
+
+            ctx.fillStyle = '#fde047';
+            ctx.fillRect(x - 7, y - 16, 14, 11);
+
+            ctx.fillStyle = '#000000';
+            if (dir === 'left') {
+                ctx.fillRect(x - 6, y - 12, 3, 3);
+            } else if (dir === 'right') {
+                ctx.fillRect(x + 3, y - 12, 3, 3);
+            } else {
+                ctx.fillRect(x - 5, y - 12, 3, 3);
+                ctx.fillRect(x + 2, y - 12, 3, 3);
+            }
+
+            ctx.fillStyle = p.hat;
+            ctx.fillRect(x - 9, y - 19, 18, 5);
+            ctx.fillRect(x - 7, y - 22, 14, 4);
+
+            ctx.font = "bold 10px 'Press Start 2P', cursive";
+            ctx.fillStyle = isMe ? '#f59e0b' : '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText(name || 'Player', x, y - 27);
+
+            ctx.restore();
+        }
+
+        function drawPixelRoomInterior(r) {
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+
+            // 1. Colorful Wallpaper / Back Wall
+            ctx.fillStyle = r.bgWall;
+            ctx.fillRect(r.x, r.y, r.w, r.h * 0.4);
+
+            // Wall Trim Pattern / Wallpaper Stripes
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+            for (let wx = r.x + 15; wx < r.x + r.w; wx += 25) {
+                ctx.fillRect(wx, r.y, 10, r.h * 0.4);
+            }
+
+            // Wainscoting / Wall Skirting Line
+            ctx.fillStyle = '#1e1b4b';
+            ctx.fillRect(r.x, r.y + r.h * 0.4 - 4, r.w, 4);
+
+            // 2. Vibrant Flooring
+            ctx.fillStyle = r.bgFloor;
+            ctx.fillRect(r.x, r.y + r.h * 0.4, r.w, r.h * 0.6);
+
+            // Flooring Patterns (Parquet / Tile Grid)
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.lineWidth = 1;
+            for (let py = r.y + r.h * 0.4 + 20; py < r.y + r.h; py += 20) {
+                ctx.beginPath(); ctx.moveTo(r.x, py); ctx.lineTo(r.x + r.w, py); ctx.stroke();
+            }
+            for (let px = r.x + 20; px < r.x + r.w; px += 25) {
+                ctx.beginPath(); ctx.moveTo(px, r.y + r.h * 0.4); ctx.lineTo(px, r.y + r.h); ctx.stroke();
+            }
+
+            // 3. Cozy Plush Round Carpet in Center
+            ctx.fillStyle = r.rugColor;
+            ctx.beginPath();
+            ctx.ellipse(r.x + r.w / 2, r.y + r.h * 0.68, 140, 65, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.stroke();
+
+            // 4. Detailed Room Furniture
+            // A. Cozy Bed (Top-Left)
+            const bedX = r.x + 20;
+            const bedY = r.y + 20;
+            // Bed frame
+            ctx.fillStyle = '#451a03';
+            ctx.fillRect(bedX, bedY, 85, 110);
+            // Mattress & Sheet
+            ctx.fillStyle = r.bedColor;
+            ctx.fillRect(bedX + 5, bedY + 24, 75, 80);
+            // Blanket fold
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(bedX + 5, bedY + 24, 75, 20);
+            // Pillow
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(bedX + 15, bedY + 6, 55, 14);
+
+            // B. Study Desk & Tech Setup (Top-Right)
+            const deskX = r.x + r.w - 100;
+            const deskY = r.y + 22;
+            // Desk Surface
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(deskX, deskY, 80, 50);
+            ctx.fillStyle = '#451a03';
+            ctx.fillRect(deskX, deskY + 45, 80, 5);
+            // Laptop / Monitor
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(deskX + 24, deskY + 10, 34, 25);
+            ctx.fillStyle = r.color; // Glowing PC Screen
+            ctx.fillRect(deskX + 26, deskY + 12, 30, 21);
+            // Lamp Glow
+            ctx.fillStyle = '#fde047';
+            ctx.beginPath();
+            ctx.arc(deskX + 10, deskY + 14, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // C. Indoor Potted Houseplant (Bottom Right Corner)
+            const plantX = r.x + r.w - 40;
+            const plantY = r.y + r.h - 60;
+            ctx.fillStyle = '#ea580c'; // Pot
+            ctx.fillRect(plantX, plantY + 18, 24, 24);
+            ctx.fillStyle = '#15803d'; // Leaves
+            ctx.beginPath();
+            ctx.arc(plantX + 12, plantY + 10, 16, 0, Math.PI * 2);
+            ctx.fill();
+
+            // D. Window with Sky View (Wall Center)
+            const winX = r.x + r.w / 2 - 45;
+            const winY = r.y + 12;
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(winX, winY, 90, 48);
+            ctx.fillStyle = '#38bdf8'; // Sky view
+            ctx.fillRect(winX + 4, winY + 4, 82, 40);
+            // Sun/Clouds in window
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath(); ctx.arc(winX + 65, winY + 18, 9, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(winX + 4, winY + 4, 82, 40);
+            ctx.beginPath(); ctx.moveTo(winX + 45, winY + 4); ctx.lineTo(winX + 45, winY + 44); ctx.stroke();
+
+            // 5. Room Outer Border Trim
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = r.color;
+            ctx.strokeRect(r.x, r.y, r.w, r.h);
+
+            // Room Name Badge (Top Center)
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(r.x + 15, r.y - 14, 130, 28);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = r.color;
+            ctx.strokeRect(r.x + 15, r.y - 14, 130, 28);
+            ctx.font = "bold 9px 'Press Start 2P', cursive";
+            ctx.fillStyle = r.color;
+            ctx.textAlign = 'center';
+            ctx.fillText(r.name, r.x + 80, r.y + 4);
+
+            // Doorway Mat outside
+            ctx.fillStyle = r.isFull ? '#10b981' : '#f59e0b';
+            if (r.id < 3) {
+                // Doors pointing down
+                ctx.fillRect(r.doorX - 35, r.doorY - 2, 70, 14);
+            } else {
+                // Doors pointing up
+                ctx.fillRect(r.doorX - 35, r.doorY - 12, 70, 14);
+            }
+
+            // 6. Semi-Transparent Glass Lock Overlay
+            if (!r.isFull) {
+                // Glassmorphism Cover
+                ctx.fillStyle = 'rgba(13, 8, 23, 0.72)';
+                ctx.fillRect(r.x + 4, r.y + 4, r.w - 8, r.h - 8);
+
+                // Center Glass Badge
+                const badgeW = 240;
+                const badgeH = 100;
+                const badgeX = r.x + (r.w - badgeW) / 2;
+                const badgeY = r.y + (r.h - badgeH) / 2;
+
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+                ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = r.color;
+                ctx.strokeRect(badgeX, badgeY, badgeW, badgeH);
+
+                // Lock Icon
+                ctx.fillStyle = '#f59e0b';
+                ctx.font = "bold 24px 'Font Awesome 6 Free'";
+                ctx.textAlign = "center";
+                ctx.fillText("\uf023", r.x + r.w / 2, badgeY + 32);
+
+                // Live Player Counter Badge
+                ctx.font = "bold 11px 'Press Start 2P', cursive";
+                ctx.fillStyle = "#ffffff";
+                ctx.fillText(`${r.occupants.length} / ${r.max} PLAYER`, r.x + r.w / 2, badgeY + 58);
+
+                ctx.font = "bold 8px 'Press Start 2P', cursive";
+                ctx.fillStyle = "#f59e0b";
+                ctx.fillText("TERKUNCI", r.x + r.w / 2, badgeY + 75);
+            }
+
+            ctx.restore();
+        }
+
+        function render() {
+            // Keep room occupants accurately updated every single frame
+            updateRoomOccupanciesAndHUD();
+
+            updateLocalPlayer();
+
+            const dpr = window.devicePixelRatio || 1;
+            const screenW = window.innerWidth;
+            const screenH = window.innerHeight;
+
+            ctx.save();
+            ctx.scale(dpr, dpr);
+
+            // Fill full viewport background
+            ctx.fillStyle = '#090511';
+            ctx.fillRect(0, 0, screenW, screenH);
+
+            // Dynamic Camera Setup: Follow local player or center of map
+            let targetCamX = localPlayerState ? localPlayerState.x : WORLD_WIDTH / 2;
+            let targetCamY = localPlayerState ? localPlayerState.y : WORLD_HEIGHT / 2;
+
+            // Responsive Zoom level based on screen width
+            const zoomLevel = screenW < 640 ? 1.05 : (screenW < 1024 ? 1.25 : 1.4);
+
+            // Viewport dimensions in world coordinates
+            const halfViewW = (screenW / 2) / zoomLevel;
+            const halfViewH = (screenH / 2) / zoomLevel;
+
+            // Clamp camera targets so camera doesn't scroll too far off world bounds
+            let clampedTargetX = Math.max(Math.min(targetCamX, WORLD_WIDTH - halfViewW / 2), halfViewW / 2);
+            let clampedTargetY = Math.max(Math.min(targetCamY, WORLD_HEIGHT - halfViewH / 2), halfViewH / 2);
+
+            // Smooth camera easing (lerp)
+            camera.x += (clampedTargetX - camera.x) * 0.1;
+            camera.y += (clampedTargetY - camera.y) * 0.1;
+
+            ctx.save();
+            // Transform view relative to dynamic camera position
+            ctx.translate(screenW / 2, screenH / 2);
+            ctx.scale(zoomLevel, zoomLevel);
+            ctx.translate(-camera.x, -camera.y);
+
+            // Outer Starfield / Void pattern outside main map
+            ctx.fillStyle = '#06030c';
+            ctx.fillRect(-1000, -1000, WORLD_WIDTH + 2000, WORLD_HEIGHT + 2000);
+
+            // Main Hallway / Arena Floor
+            ctx.fillStyle = '#1e1b4b';
+            ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+            // Arena Outer Wall Border
+            ctx.lineWidth = 8;
+            ctx.strokeStyle = '#f59e0b';
+            ctx.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+            ctx.strokeStyle = '#2e1065';
+            ctx.lineWidth = 2;
+            for (let x = 0; x <= WORLD_WIDTH; x += 40) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_HEIGHT); ctx.stroke();
+            }
+            for (let y = 0; y <= WORLD_HEIGHT; y += 40) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD_WIDTH, y); ctx.stroke();
+            }
+
+            // Wide Red Carpet Path down central boulevard
+            ctx.fillStyle = 'rgba(185, 28, 28, 0.45)';
+            ctx.fillRect(40, 410, WORLD_WIDTH - 80, 230);
+
+            // Render all 6 rooms
+            rooms.forEach(r => drawPixelRoomInterior(r));
+
+            // Render remote players
+            remotePlayersMap.forEach((player) => {
+                if (player.id !== instancePlayerId) {
+                    drawPixelCharacter(
+                        player.x, player.y,
+                        player.palette, player.dir || 'down',
+                        player.animFrame || 0, false, player.name
+                    );
+                }
+            });
+
+            // Render local player
+            if (localPlayerState) {
+                drawPixelCharacter(
+                    localPlayerState.x, localPlayerState.y,
+                    localPlayerState.palette, localPlayerState.dir || 'down',
+                    localPlayerState.animFrame || 0, true, localPlayerState.name
+                );
+            }
+
+            updateParticles();
+
+            ctx.restore();
+            ctx.restore();
+
+            requestAnimationFrame(render);
+        }
+
+        function updateOnlineModalList() {
+            const listElem = document.getElementById('online-players-list');
+            if (!listElem) return;
+            listElem.innerHTML = "";
+
+            const allPlayers = [];
+            if (localPlayerState) allPlayers.push({ ...localPlayerState, isMe: true });
+            remotePlayersMap.forEach((p) => allPlayers.push({ ...p, isMe: false }));
+
+            allPlayers.forEach((player) => {
+                const item = document.createElement('div');
+                item.className = "flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-indigo-900";
+                
+                let roomText = "Di Lorong";
+                if (player.isLockedIn && player.currentRoom !== null && player.currentRoom !== undefined) {
+                    roomText = `Kamar ${player.currentRoom + 1}`;
+                }
+
+                item.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full" style="background-color: ${player.palette?.shirt || '#f59e0b'}"></span>
+                        <span class="font-bold text-xs ${player.isMe ? 'text-amber-400' : 'text-slate-200'}">${player.name || 'Player'} ${player.isMe ? '(Kamu)' : ''}</span>
+                    </div>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-900 text-amber-300 font-pixel">${roomText}</span>
+                `;
+                listElem.appendChild(item);
+            });
+        }
+
+        function showFinalResults() {
+            const grid = document.getElementById('results-grid');
+            if (!grid) return;
+            grid.innerHTML = "";
+
+            rooms.forEach((r) => {
+                const card = document.createElement('div');
+                card.className = "bg-slate-950 p-4 rounded-2xl border-2 border-indigo-800 flex flex-col justify-between";
+                
+                let occupantsHTML = r.occupants.map(p => `
+                    <li class="flex items-center gap-2 text-xs py-1 border-b border-indigo-900/50">
+                        <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${p.palette?.shirt || '#f59e0b'}"></span>
+                        <span class="${p.id === instancePlayerId ? 'font-bold text-amber-400' : 'text-slate-200'}">${p.name}</span>
+                    </li>
+                `).join('');
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-pixel text-xs text-amber-300" style="color: ${r.color}">${r.name}</span>
+                            <span class="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500 px-2 py-0.5 rounded-full font-bold">PENUH (${r.occupants.length}/${r.max})</span>
+                        </div>
+                        <ul class="divide-y divide-indigo-950">
+                            ${occupantsHTML || '<li class="text-xs text-slate-500 italic py-1">Kosong</li>'}
+                        </ul>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            document.getElementById('result-modal').classList.remove('hidden');
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.publish(MQTT_TOPIC, JSON.stringify({
+                    type: 'PLAYER_LEAVE',
+                    senderId: instancePlayerId,
+                    playerId: instancePlayerId
+                }));
+            }
+        });
+
+        document.getElementById('toggle-online-list-btn')?.addEventListener('click', () => {
+            updateOnlineModalList();
+            document.getElementById('online-players-modal')?.classList.remove('hidden');
+        });
+
+        document.getElementById('close-online-modal-btn')?.addEventListener('click', () => {
+            document.getElementById('online-players-modal')?.classList.add('hidden');
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            const nameInput = document.getElementById('player-name-input').value.trim();
+            startMultiplayerSession(nameInput || "Pemain Pixel");
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('result-modal').classList.add('hidden');
+            document.getElementById('start-modal').classList.remove('hidden');
+            isGameJoined = false;
+        });
+
+        document.getElementById('fullscreen-btn').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {
+                    showToast("Layar penuh tidak didukung di browser ini.");
+                });
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        });
+
+        document.getElementById('reset-session-btn').addEventListener('click', () => {
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.publish(MQTT_TOPIC, JSON.stringify({
+                    type: 'RESET_ALL',
+                    senderId: instancePlayerId
+                }));
+                showToast("Arena telah direset!");
+            }
+        });
+
+        window.onload = function () {
+            requestAnimationFrame(render);
+        };
+    </script>
+</body>
+</html>
+```
